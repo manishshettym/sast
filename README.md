@@ -1,2 +1,2 @@
 # simplipy
-*S*implified *AST* representation for python
+**S**implified **AST** (SAST) representation for python

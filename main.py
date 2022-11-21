@@ -6,6 +6,7 @@ from python_graphs.program_graph import ProgramGraph
 from python_graphs import program_graph, program_graph_graphviz
 from python_graphs import program_graph_dataclasses as pb
 from simple_ast import get_simplified_ast
+from utils import remove_comments_and_docstrings
 from visualizers import render_sast
 
 
@@ -134,6 +135,9 @@ if __name__ == "__main__":
     file = f"./examples/{args.file}.py"
     with open(file, 'r') as fp:
         source = fp.read()
+    
+    # remove comments and docstrings
+    source = remove_comments_and_docstrings(source)
 
     ##### PGRAPHS #####
     pgraph = program_graph.get_program_graph(source)

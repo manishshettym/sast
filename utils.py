@@ -2,6 +2,9 @@ import re
 import gast as ast
 import io
 import tokenize
+from collections import defaultdict
+import textwrap
+
 from python_graphs.program_graph import ProgramGraph
 from python_graphs import program_graph_dataclasses as pb
 
@@ -125,6 +128,77 @@ def label_nodes(sast: ProgramGraph, source: str):
         setattr(node, 'span', span)
 
     return sast
+
+
+def add_indent_to_block(prog_str: str):
+    return textwrap.indent(prog_str, 1 * '\t')
+
+
+def replace_nonterminals(node, child_spans):
+    '''replace nonterminals in a node's span'''
+
+    module_flag = False
+    if isinstance(node.ast_node, ast.Module):
+        module_flag = True
+
+    child_spans = sorted(child_spans, key=lambda x: x[1])
+    new_span = node.span if not module_flag else ""
+
+    if ' else' in new_span:
+        new_span = new_span.replace(' else', '\nelse')
+
+    for span, _ in child_spans:
+
+        elif_flag = span.startswith('elif')
+        else_flag = 'else' in span
+
+        if module_flag:
+            new_span += span + "\n"
+        else:
+
+            col_loc = None
+            nont_loc = new_span.index('#')
+            if ':' in new_span:
+                col_loc = new_span.index(':')
+            
+            # update the child_span
+            if elif_flag:
+                span = f"\n{span}"
+                if else_flag:
+                    span = span.replace(' else', '\nelse')
+            
+            elif col_loc and nont_loc > col_loc:
+                span = f"\n{add_indent_to_block(span)}"
+
+            new_span = new_span.replace('#', span, 1)
+
+    node.span = new_span
+    return node
+
+
+def sast_to_prog(sast: ProgramGraph):
+    '''perform an dfs traversal and regenerate prog'''
+
+    def dfs_util(sast: ProgramGraph, node, visited):
+        visited[node.id] = True
+        span_pos = []
+        
+        for child in sast.children(node):
+            if not visited[child.id]:
+                span, pos = dfs_util(sast, child, visited)
+                span_pos.append((span, pos))
+        
+        node = replace_nonterminals(node, span_pos)
+        return node.span, node.relpos
+
+    visited = defaultdict()
+    for node in sast.all_nodes():
+        visited[node.id] = False
+
+    for node in sast.all_nodes():
+        dfs_util(sast, node, visited)
+    
+    return sast.root.span
 
 
 def remove_comments_and_docstrings(source: str):

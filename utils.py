@@ -134,8 +134,23 @@ def add_indent_to_block(prog_str: str):
     return textwrap.indent(prog_str, 1 * '\t')
 
 
+def kth_substr_idx(s: str, sub: str, k):
+    where = [m.start() for m in re.finditer(sub, s)]
+
+    if len(where) < k - 1:
+        return -1
+    else:
+        return where[k - 1]
+
+
+# NOTE @manishs: migth be incomplete and hacky. Need to
+# clean it up in the future and simplify transpilation between
+# source and sast.
 def replace_nonterminals(node, child_spans):
     '''replace nonterminals in a node's span'''
+
+    ins = 0
+    dels = 0
 
     module_flag = False
     if isinstance(node.ast_node, ast.Module):
@@ -147,17 +162,18 @@ def replace_nonterminals(node, child_spans):
     if ' else' in new_span:
         new_span = new_span.replace(' else', '\nelse')
 
-    for span, _ in child_spans:
-
+    for span, span_idx in child_spans:
         elif_flag = span.startswith('elif')
         else_flag = 'else' in span
+        span_idx = span_idx - dels + ins
 
         if module_flag:
             new_span += span + "\n"
         else:
 
             col_loc = None
-            nont_loc = new_span.index('#')
+            loc = kth_substr_idx(new_span, '#', k=span_idx + 1)
+
             if ':' in new_span:
                 col_loc = new_span.index(':')
             
@@ -167,10 +183,13 @@ def replace_nonterminals(node, child_spans):
                 if else_flag:
                     span = span.replace(' else', '\nelse')
             
-            elif col_loc and nont_loc > col_loc:
+            elif col_loc and loc > col_loc:
                 span = f"\n{add_indent_to_block(span)}"
 
-            new_span = new_span.replace('#', span, 1)
+            new_span = new_span[:loc] + new_span[loc:].replace('#', span, 1)
+            
+            dels += 1
+            ins += len([m for m in re.finditer('#', span)])
 
     node.span = new_span
     return node
@@ -187,7 +206,9 @@ def sast_to_prog(sast: ProgramGraph):
             if not visited[child.id]:
                 span, pos = dfs_util(sast, child, visited)
                 span_pos.append((span, pos))
-        
+            else:
+                span_pos.append((child.span, child.relpos))
+    
         node = replace_nonterminals(node, span_pos)
         return node.span, node.relpos
 
@@ -196,7 +217,8 @@ def sast_to_prog(sast: ProgramGraph):
         visited[node.id] = False
 
     for node in sast.all_nodes():
-        dfs_util(sast, node, visited)
+        if not visited[node.id]:
+            dfs_util(sast, node, visited)
     
     return sast.root.span
 

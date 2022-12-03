@@ -1,7 +1,9 @@
 import argparse
 from python_graphs import program_graph, program_graph_graphviz
 from simplified_ast import get_simplified_ast
-from utils import remove_comments_and_docstrings, collapse_nodes, label_nodes
+from utils import (
+    remove_comments_and_docstrings, collapse_nodes, 
+    label_nodes, sast_to_prog)
 from visualizers import render_sast
 
 
@@ -29,5 +31,6 @@ if __name__ == "__main__":
     if sast is not None:
         sast = label_nodes(sast, source)
         render_sast(sast, path="tmp/sast.png", spans=True)
+        # print(sast_to_prog(sast))
     else:
         print("SAST is an empty graph :(")

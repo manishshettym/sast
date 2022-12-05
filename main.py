@@ -30,7 +30,7 @@ if __name__ == "__main__":
     sast = collapse_nodes(sast)
     if sast is not None:
         sast = label_nodes(sast, source)
-        render_sast(sast, path="tmp/sast.png", spans=True)
+        render_sast(sast, path="tmp/sast.png", spans=True, relpos=True)
         # print(sast_to_prog(sast))
     else:
         print("SAST is an empty graph :(")

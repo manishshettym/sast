@@ -4,12 +4,19 @@ from python_graphs import program_utils, control_flow
 from transformers import DropDecorators, CodeSpan
 import gast as ast
 
+from utils import (remove_comments_and_docstrings, collapse_nodes, label_nodes)
+
 
 AST_NODE_FILTER = (ast.Load, ast.Store)
 
 def get_simplified_ast(program, dfg=False, cfg=False, compfrom=False):
     """Constructs a program graph to represent the given program."""
-    program_node = program_utils.program_to_ast(program)
+
+    program = remove_comments_and_docstrings(program)
+    try:
+        program_node = program_utils.program_to_ast(program)
+    except:
+        return None
 
     # Apply AST transformers
     program_node = DropDecorators().visit(ast.parse(program))
@@ -18,12 +25,13 @@ def get_simplified_ast(program, dfg=False, cfg=False, compfrom=False):
     program_graph = ProgramGraph()
     control_flow_graph = control_flow.get_control_flow_graph(program_node)
 
-    # Add AST_NODE program graph nodes corresponding to Instructions in CFG 
+    # Add AST_NODE nodes corresponding to Instructions in CFG
     if cfg:
         for control_flow_node in control_flow_graph.get_control_flow_nodes():
-            program_graph.add_node_from_instruction(control_flow_node.instruction)
+            program_graph.add_node_from_instruction(
+                control_flow_node.instruction)
 
-    # Add AST_NODE program graph nodes corresponding to AST nodes.
+    # Add AST_NODE nodes corresponding to AST nodes.
     for ast_node in ast.walk(program_node):
         if isinstance(ast_node, AST_NODE_FILTER):
             continue
@@ -44,13 +52,15 @@ def get_simplified_ast(program, dfg=False, cfg=False, compfrom=False):
                 for index, item in enumerate(value):
                     list_field_name = make_list_field_name(field_name, index)
                     if isinstance(item, ast.AST):
-                        program_graph.add_new_edge(ast_node, item, pb.EdgeType.FIELD,
-                                                list_field_name)
+                        program_graph.add_new_edge(
+                            ast_node, item, pb.EdgeType.FIELD,
+                            list_field_name)
                     else:
                         item_node = make_node_from_ast_value(item)
                         program_graph.add_node(item_node)
-                        program_graph.add_new_edge(ast_node, item_node, pb.EdgeType.FIELD,
-                                                list_field_name)
+                        program_graph.add_new_edge(
+                            ast_node, item_node, pb.EdgeType.FIELD,
+                            list_field_name)
             elif isinstance(value, ast.AST):
                 program_graph.add_new_edge(
                     ast_node, value, pb.EdgeType.FIELD, field_name)
@@ -75,7 +85,8 @@ def get_simplified_ast(program, dfg=False, cfg=False, compfrom=False):
     if dfg:
         for control_flow_node in control_flow_graph.get_control_flow_nodes():
             # Start with the most recent accesses before this instruction.
-            last_accesses = control_flow_node.get_label('last_access_in').copy()
+            last_accesses = control_flow_node.get_label(
+                'last_access_in').copy()
 
             for access in control_flow_node.instruction.accesses:
                 # Extract the node and identifiers for the current access.
@@ -96,9 +107,10 @@ def get_simplified_ast(program, dfg=False, cfg=False, compfrom=False):
                 for write in last_accesses.get(write_identifier, []):
                     write_pg_node = program_graph.get_node_by_access(write)
                     program_graph.add_new_edge(
-                        pg_node, write_pg_node, edge_type=pb.EdgeType.LAST_WRITE)
+                        pg_node, write_pg_node,
+                        edge_type=pb.EdgeType.LAST_WRITE)
 
-                # Update the state to refer to this access as the most recent one.
+                # Update state to refer to this access as the most recent one.
                 if instruction_module.access_is_read(access):
                     last_accesses[read_identifier] = [access]
                 elif instruction_module.access_is_write(access):
@@ -112,7 +124,15 @@ def get_simplified_ast(program, dfg=False, cfg=False, compfrom=False):
                     if isinstance(value_node, ast.Name):
                         for target in node.targets:
                             program_graph.add_new_edge(
-                            target, value_node, edge_type=pb.EdgeType.COMPUTED_FROM)
-        
-    return program_graph
+                                target, value_node,
+                                edge_type=pb.EdgeType.COMPUTED_FROM)
+    
+    # simplify the graph by removing noisy nodes
+    sast = collapse_nodes(program_graph)
+    if sast is None:
+        return None
 
+    # label SAST nodes with concrete syntax
+    sast = label_nodes(sast, program)
+    
+    return sast

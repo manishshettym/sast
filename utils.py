@@ -183,7 +183,7 @@ def sast_to_prog(sast: ProgramGraph):
                 span_pos.append((span, pos))
             else:
                 span_pos.append((child.span, child.relpos))
-    
+
         node = replace_nonterminals(node, span_pos)
         return node.span, node.relpos
 
